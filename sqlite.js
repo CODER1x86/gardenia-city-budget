@@ -95,9 +95,12 @@ const initializeDatabase = async () => {
     )`);
 
     // Create indexes
-    await db.run("CREATE INDEX IF NOT EXISTS idx_payment_date ON revenue(payment_date)");
-    await db.run("CREATE INDEX IF NOT EXISTS idx_expense_date ON expenses(expense_date)");
-
+    await db.run(
+      "CREATE INDEX IF NOT EXISTS idx_payment_date ON revenue(payment_date)"
+    );
+    await db.run(
+      "CREATE INDEX IF NOT EXISTS idx_expense_date ON expenses(expense_date)"
+    );
   } catch (error) {
     console.error("Error initializing database:", error);
   }
@@ -108,17 +111,28 @@ const getDb = () => {
   return db;
 };
 
-// Helper function to run database queries with parameterized statements
-const dbQuery = async (query, params = []) => {
-  console.log(`Running query: ${query} with params: ${params}`);
+// Enhanced helper functions to run database queries
+const dbQuery = (query, params = []) => {
   return new Promise((resolve, reject) => {
-    db.all(query, params, (error, rows) => {
-      if (error) {
-        console.error("Error running query:", error);
-        reject(error);
+    db.all(query, params, (err, rows) => {
+      if (err) {
+        console.error("Error running query:", err);
+        reject(err);
       } else {
-        console.log("Query result:", rows);
         resolve(rows);
+      }
+    });
+  });
+};
+
+const dbRun = (query, params = []) => {
+  return new Promise((resolve, reject) => {
+    db.run(query, params, function (err) {
+      if (err) {
+        console.error("Error running query:", err);
+        reject(err);
+      } else {
+        resolve({ id: this.lastID });
       }
     });
   });
@@ -128,7 +142,9 @@ const dbQuery = async (query, params = []) => {
 const getExpenses = async () => {
   try {
     console.log("Fetching expenses");
-    const expenses = await dbQuery("SELECT expense_id, category, item, price, expense_date FROM expenses");
+    const expenses = await dbQuery(
+      "SELECT expense_id, category, item, price, expense_date FROM expenses"
+    );
     console.log("Expenses fetched:", expenses);
     return expenses;
   } catch (error) {
@@ -141,10 +157,13 @@ const getExpenses = async () => {
 const getRevenue = async (year) => {
   try {
     console.log(`Fetching total revenue for year ${year}`);
-    const result = await dbQuery(`
+    const result = await dbQuery(
+      `
       SELECT COALESCE(SUM(amount), 0) AS totalRevenue 
       FROM revenue 
-      WHERE strftime('%Y', payment_date) = ?`, [year]);
+      WHERE strftime('%Y', payment_date) = ?`,
+      [year]
+    );
     console.log(`Revenue result for year ${year}:`, result);
     return result[0];
   } catch (error) {
@@ -157,10 +176,13 @@ const getRevenue = async (year) => {
 const getExpensesSum = async (year) => {
   try {
     console.log(`Fetching total expenses for year ${year}`);
-    const result = await dbQuery(`
+    const result = await dbQuery(
+      `
       SELECT COALESCE(SUM(price), 0) AS totalExpenses 
       FROM expenses 
-      WHERE strftime('%Y', expense_date) = ?`, [year]);
+      WHERE strftime('%Y', expense_date) = ?`,
+      [year]
+    );
     console.log(`Expenses result for year ${year}:`, result);
     return result[0];
   } catch (error) {
@@ -173,7 +195,9 @@ const getExpensesSum = async (year) => {
 const getInventory = async () => {
   try {
     console.log("Fetching inventory");
-    const inventory = await dbQuery("SELECT inventory_id, expense_id, location, usage_date, status FROM inventory");
+    const inventory = await dbQuery(
+      "SELECT inventory_id, expense_id, location, usage_date, status FROM inventory"
+    );
     console.log("Inventory fetched:", inventory);
     return inventory;
   } catch (error) {
@@ -185,13 +209,16 @@ const getInventory = async () => {
 // Add an inventory item
 const addInventoryItem = async (expense_id, location, usage_date, status) => {
   try {
-    console.log(`Adding inventory item with expense_id: ${expense_id}, location: ${location}, usage_date: ${usage_date}, status: ${status}`);
-    await db.run(
+    console.log(
+      `Adding inventory item with expense_id: ${expense_id}, location: ${location}, usage_date: ${usage_date}, status: ${status}`
+    );
+    await dbRun(
       "INSERT INTO inventory (expense_id, location, usage_date, last_updated, status) VALUES (?, ?, ?, ?, ?)",
       [expense_id, location, usage_date, new Date().toISOString(), status]
     );
     console.log("Inventory item added");
   } catch (error) {
+    console.error("Error adding inventory item:", error    );
     console.error("Error adding inventory item:", error);
     throw error;
   }
@@ -205,7 +232,8 @@ const getStartingBalance = async (year) => {
       return 12362; // Manually set for the initial year
     }
     const previousYear = year - 1;
-    const result = await dbQuery(`
+    const result = await dbQuery(
+      `
       WITH revenue_total AS (
           SELECT COALESCE(SUM(amount), 0) AS total_revenue 
           FROM revenue 
@@ -219,7 +247,9 @@ const getStartingBalance = async (year) => {
       SELECT 
           (SELECT total_revenue FROM revenue_total) - 
           (SELECT total_expenses FROM expense_total) AS availableBalance;
-    `, [previousYear, previousYear]);
+    `,
+      [previousYear, previousYear]
+    );
     console.log(`Starting balance result for year ${year}:`, result);
     return result[0].availableBalance;
   } catch (error) {
@@ -236,14 +266,42 @@ const calculateAndInsertBalance = async (year) => {
     const totalRevenue = (await getRevenue(year)).totalRevenue || 0;
     const totalExpenses = (await getExpensesSum(year)).totalExpenses || 0;
     const availableBalance = startingBalance + totalRevenue - totalExpenses;
-    await db.run(`INSERT INTO balance (year, starting_balance, total_revenue, total_expenses, available_balance) VALUES (?, ?, ?, ?, ?)`, 
-       [year, startingBalance, totalRevenue, totalExpenses, availableBalance]);
+    await dbRun(
+      `INSERT INTO balance (year, starting_balance, total_revenue, total_expenses, available_balance) VALUES (?, ?, ?, ?, ?)`,
+      [year, startingBalance, totalRevenue, totalExpenses, availableBalance]
+    );
     console.log(`Inserted balance for year ${year}`);
     return availableBalance;
   } catch (error) {
     console.error("Error calculating and inserting balance:", error);
     throw error;
   }
+};
+
+// Update an existing expense
+const updateExpense = async (
+  expense_id,
+  category,
+  item,
+  price,
+  expense_date
+) => {
+  const query = `UPDATE expenses SET category = ?, item = ?, price = ?, expense_date = ?, last_updated = ? WHERE expense_id = ?`;
+  const params = [
+    category,
+    item,
+    price,
+    expense_date,
+    new Date().toISOString(),
+    expense_id,
+  ];
+  await dbRun(query, params);
+};
+
+// Delete an existing expense
+const deleteExpense = async (expense_id) => {
+  const query = `DELETE FROM expenses WHERE expense_id = ?`;
+  await dbRun(query, [expense_id]);
 };
 
 // Module Exports
@@ -256,5 +314,8 @@ module.exports = {
   getInventory,
   addInventoryItem,
   getStartingBalance,
-  calculateAndInsertBalance
+  calculateAndInsertBalance,
+  dbQuery, // Exporting dbQuery for modular usage
+  updateExpense,
+  deleteExpense,
 };

@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Budget Details - Gardenia Budget Management</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header id="header"></header>
+    <main>
+        <section id="budget-details-section">
+            <h1>Budget Details</h1>
+            <div id="budget-info">
+                <!-- Content for detailed budget information will load here -->
+            </div>
+        </section>
+    </main>
+    <footer id="footer"></footer>
+    
+    <!-- Public access scripts -->
+    <script src="js/siteStyle.js"></script>
+    <script src="js/headerFooter.js"></script>
+    <script src="js/financialData.js"></script>
+    
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            loadHeaderFooter(); // Load header and footer templates
+            fetchBudgetDetails(); // Initialize the budget details section
+        });
+    </script>
+</body>
+</html>
